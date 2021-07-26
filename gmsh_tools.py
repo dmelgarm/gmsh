@@ -27,7 +27,7 @@ def xyz2gmsh(fout,lon,lat,depth,coord_type='UTM',projection_zone=None,point_offs
     f.close()
 
 
-def gmsh2ascii(fout,msh_in,utm_zone='10T',flip_lon=False):
+def gmsh2ascii(fout,msh_in,utm_zone='10T',flip_lon=False,flip_strike=False):
     '''
     This prepares the output of gmsh for something usable by mudpy.
     Read triangle information from gmsh msh file and extract node coordinates, 
@@ -45,15 +45,20 @@ def gmsh2ascii(fout,msh_in,utm_zone='10T',flip_lon=False):
     L=get_vertex_lengths(ncoords)
     #Get strike and dip
     strike,dip=get_geometry(ncoords)
+    if flip_strike:
+        strike += 180
     #Convert from UTM to lat,lon
     ncoords,centroids=coords2latlon(ncoords,centroids,zone=utm_zone)
     if flip_lon==True:
         centroids[:,1]=centroids[:,1]-360
+        ncoords[:,1]-=360
+        ncoords[:,4]-=360
+        ncoords[:,7]-=360
     #And done, save
     out=c_[centroids,ncoords[:,1:],L.mean(1),areas,strike,dip]
-    savetxt(fout,out,fmt='%i\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%9.2f\t%9.2f\t%9.2f\t%9.2f',header='  fault No. , centroid(lon,lat,z[km]) , node2(lon,lat,z[km]) , node3(lon,lat,z[km]) , mean vertex length(km) , area(km^2) , strike(deg) , dip(deg)')
+    savetxt(fout,out,fmt='%i\t%12.6f\t%12.6f\t%12.8f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%12.6f\t%9.2f\t%9.2f\t%9.2f\t%9.2f',header='  fault No. , centroid(lon,lat,z[km]) , node2(lon,lat,z[km]) , node3(lon,lat,z[km]) , mean vertex length(km) , area(km^2) , strike(deg) , dip(deg)')
     
-def make_mudpy_fault(faultin,faultout,vr=None,rise_time_all=None,flip_strike=False):
+def make_mudpy_fault(faultin,faultout,vr=2.6,rise_time_all=5.0,flip_strike=False):
     '''
     Convert to mudpy format fault
     '''
@@ -78,7 +83,8 @@ def make_mudpy_fault(faultin,faultout,vr=None,rise_time_all=None,flip_strike=Fal
     length=(f[:,14]**0.5)*1000  #Square root of the area (in m)
     #Put together and write file
     out=c_[n,lon,lat,depth,strike,dip,triangle,rise_time,length,length]
-    savetxt(faultout,out,fmt='%i\t%10.6f\t%10.6f\t%8.3f\t%.2f\t%.2f\t%6.3f\t%6.3f\t%10.2f\t%10.2f')
+    h='No,lon,lat,depth(km),strike,dip,type,rise time(s),length(km),width(km)'
+    savetxt(faultout,out,fmt='%i\t%10.6f\t%10.6f\t%12.8f\t%.2f\t%.2f\t%6.3f\t%6.3f\t%10.2f\t%10.2f',header=h)
     
 def get_perimeter(gmsh):
     '''
@@ -203,8 +209,9 @@ def read_msh(msh_in):
     f=open(msh_in)
     while True:
         line=f.readline()
-        print line
+        print(line)
         if '$Nodes' in line:
+            print(line)
             num_nodes=int(f.readline())
             nodes=zeros((num_nodes,4))
             for k in range(num_nodes):
@@ -364,7 +371,7 @@ def get_utm_zone(lon,lat):
     for k in range(len(lon)):
         x,y,zone[k],b[k]=utm.from_latlon(lat[k],lon[k]-360)
     zone_mode=mode(zone)
-    print zone
+    print(zone)
     i=where(zone==zone_mode)[0]
     letter=b[i[0]]
     z=str(int(zone[0]))+letter
